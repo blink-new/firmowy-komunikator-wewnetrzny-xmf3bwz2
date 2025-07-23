@@ -23,7 +23,7 @@ export function ChatArea({ channel, user }: ChatAreaProps) {
   }, [])
 
   const loadMessages = useCallback(async () => {
-    if (!channel) return
+    if (!channel || !channel.id) return
     
     try {
       setIsLoading(true)
@@ -32,9 +32,14 @@ export function ChatArea({ channel, user }: ChatAreaProps) {
         orderBy: { created_at: 'asc' },
         limit: 100
       })
-      setMessages(messagesData)
+      // Filter out any invalid messages
+      const validMessages = messagesData.filter(msg => 
+        msg && msg.id && msg.user_id && msg.content && msg.channel_id
+      )
+      setMessages(validMessages)
     } catch (error) {
       console.error('Error loading messages:', error)
+      setMessages([]) // Set empty array on error
     } finally {
       setIsLoading(false)
     }
@@ -51,10 +56,10 @@ export function ChatArea({ channel, user }: ChatAreaProps) {
   }, [messages, scrollToBottom])
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !channel || !user) return
+    if (!newMessage.trim() || !channel || !user || !channel.id || !user.id) return
 
     try {
-      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
       
       const message = await blink.db.messages.create({
         id: messageId,
@@ -64,10 +69,14 @@ export function ChatArea({ channel, user }: ChatAreaProps) {
         message_type: 'text'
       })
 
-      setMessages(prev => [...prev, message])
+      // Only add message if it's valid
+      if (message && message.id && message.user_id && message.content) {
+        setMessages(prev => [...prev, message])
+      }
       setNewMessage('')
     } catch (error) {
       console.error('Error sending message:', error)
+      // Could add user notification here
     }
   }
 
@@ -79,14 +88,23 @@ export function ChatArea({ channel, user }: ChatAreaProps) {
   }
 
   const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString('pl-PL', {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    if (!timestamp) return '--:--'
+    try {
+      return new Date(timestamp).toLocaleTimeString('pl-PL', {
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } catch (error) {
+      console.error('Error formatting time:', error)
+      return '--:--'
+    }
   }
 
   const getUserInitials = (userId: string) => {
     // For demo purposes, generate initials from user ID
+    if (!userId || typeof userId !== 'string') {
+      return 'U'
+    }
     return userId.substring(0, 2).toUpperCase()
   }
 
@@ -141,8 +159,13 @@ export function ChatArea({ channel, user }: ChatAreaProps) {
             </div>
           ) : (
             messages.map((message, index) => {
+              // Add safety checks for message data
+              if (!message || !message.id || !message.user_id || !message.content) {
+                return null
+              }
+              
               const isCurrentUser = message.user_id === user?.id
-              const showAvatar = index === 0 || messages[index - 1].user_id !== message.user_id
+              const showAvatar = index === 0 || messages[index - 1]?.user_id !== message.user_id
               
               return (
                 <div key={message.id} className="flex items-start space-x-3">
@@ -182,7 +205,7 @@ export function ChatArea({ channel, user }: ChatAreaProps) {
                   </div>
                 </div>
               )
-            })
+            }).filter(Boolean)
           )}
           <div ref={messagesEndRef} />
         </div>

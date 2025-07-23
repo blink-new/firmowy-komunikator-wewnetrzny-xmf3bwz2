@@ -19,15 +19,21 @@ function App() {
   }, [])
 
   const loadChannel = async (channelId: string) => {
+    if (!channelId) return
+    
     try {
       const channels = await blink.db.channels.list({
         where: { id: channelId }
       })
-      if (channels.length > 0) {
+      if (channels.length > 0 && channels[0].id) {
         setSelectedChannel(channels[0])
+      } else {
+        console.warn(`Channel with id ${channelId} not found`)
+        setSelectedChannel(null)
       }
     } catch (error) {
       console.error('Error loading channel:', error)
+      setSelectedChannel(null)
     }
   }
 
